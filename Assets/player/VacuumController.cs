@@ -9,24 +9,20 @@ using UnityEngine.Events;
 
 public class VacuumController : MonoBehaviour
 {
-    // =========================
-    // REFERENCIAS
-    // =========================
+    // ========== Referencias ==========
     [Header("Referencias")]
-    public Transform boquilla;                    // Empty en la punta del tubo
-    public Transform contenedorInterno;          // Empty para almacenar (si no destruyes)
-    public AudioSource motorAudio;               // Loop del motor
-    public ParticleSystem vfxSuccion;            // Partículas en la boquilla
-    public Camera cam;                           // Cámara FPS (para FOV y temblor)
+    public Transform boquilla;           // Empty en la punta del tubo
+    public Transform contenedorInterno;  // Empty para almacenar (si no destruyes)
+    public AudioSource motorAudio;
+    public ParticleSystem vfxSuccion;
+    public Camera cam;
 
-    // =========================
-    // FEEDBACK SENSORIAL
-    // =========================
+    // ========== Feedback ==========
     [Header("Feedback sensorial")]
-    [Range(0f, 5f)] public float fovKick = 1.2f;   // escalará según modo
+    [Range(0f, 5f)] public float fovKick = 1.2f;
     public float fovRecuperacion = 7f;
     [Header("Temblor (Perlin)")]
-    public float temblorAmplitud = 0.015f;         // escalará según modo
+    public float temblorAmplitud = 0.015f;
     public float temblorFrecuencia = 9f;
     public float temblorSuavizado = 14f;
 
@@ -34,28 +30,20 @@ public class VacuumController : MonoBehaviour
     private float perlinT;
     private Vector3 camLocalBasePos;
 
-    // =========================
-    // GEOMETRÍA BASE
-    // =========================
+    // ========== Geometría ==========
     [Header("Geometría de succión")]
-    public float rangoMax = 3.0f;                  // m
+    public float rangoMax = 3.0f;
     [Tooltip("Ángulo total del cono (grados).")]
-    public float anguloCono = 30f;                 // total
-    public float radioZonaCaptura = 0.35f;         // m
+    public float anguloCono = 30f;
+    public float radioZonaCaptura = 0.45f; // un poco mayor para “boca”
     [Tooltip("Desplaza el centro de captura unos cm hacia delante.")]
-    public float capturaOffset = 0.05f;            // m
+    public float capturaOffset = 0.05f;
 
-    // =========================
-    // FÍSICA
-    // =========================
+    // ========== Física ==========
     [Header("Física")]
-    [Tooltip("Rigidez base del resorte (25–60 recomendado).")]
     public float rigidezBase = 40f;
-    [Tooltip("Curva de rigidez según distancia (input: 0=boquilla, 1=rango).")]
     public AnimationCurve rigidezPorDistancia = AnimationCurve.EaseInOut(0, 1, 1, 0.35f);
-    [Tooltip("Factor sobre amortiguación crítica (0.6–1.4).")]
     public float factorAmortiguacion = 1.0f;
-    [Tooltip("Límite de aceleración (m/s^2) para estabilidad.")]
     public float limiteAceleracion = 50f;
 
     [Header("Asistencia cercana (snap)")]
@@ -63,28 +51,21 @@ public class VacuumController : MonoBehaviour
     [Range(0f, 1f)] public float mezclaSnap = 0.4f;
     public float snapVelocidad = 12f;
 
-    // =========================
-    // CAPTURA + CAPACIDAD
-    // =========================
+    // ========== Captura/Capacidad ==========
     [Header("Captura + Capacidad")]
     public int capacidadMax = 10;
     public bool destruirMicroBasura = true;
-    [Tooltip("Ignora capacidad y destruye TODOS los objetos al capturar.")]
     public bool destruirTodosAlCapturar = false;
     public float cooldownCaptura = 0.1f;
-    public float masaMaxAspirable = 8f;
-    public bool requiereLineaDeVision = true;
+    public float masaMaxAspirable = 100f; // subido para evitar bloqueos
+    public bool requiereLineaDeVision = false; // para pruebas: OFF; luego ON
 
-    // =========================
-    // CAPAS
-    // =========================
+    // ========== Capas ==========
     [Header("Capas")]
-    public LayerMask capasAspirables;            // "Basura"
-    public LayerMask capasBloqueo;               // "Entorno"
+    public LayerMask capasAspirables;
+    public LayerMask capasBloqueo;
 
-    // =========================
-    // EVENTOS
-    // =========================
+    // ========== Eventos ==========
     [Header("Eventos")]
     public IntEvent OnCapturadoMicro;
     public GOEvent  OnCapturadoNormal;
@@ -92,9 +73,7 @@ public class VacuumController : MonoBehaviour
     public FloatEvent OnEnergiaCambiada;   // 0..1
     public StringEvent OnModoCambiado;     // nombre del modo
 
-    // =========================
-    // OPTIMIZACIONES
-    // =========================
+    // ========== Optimización ==========
     [Header("Optimización")]
     public int maxObjetosPorFrame = 16;
     public int maxRaycastsPorFrame = 12;
@@ -104,20 +83,13 @@ public class VacuumController : MonoBehaviour
     private struct LoSEntry { public bool libre; public float expira; public float ultimaDist; }
     private readonly Dictionary<int, LoSEntry> losCache = new Dictionary<int, LoSEntry>(128);
 
-    // =========================
-    // DEBUG / PERF HUD
-    // =========================
+    // ========== Debug ==========
     [Header("Debug/Perf")]
     public bool debugOverlayGUI = true;
     public bool debugDrawRays = false;
     public bool debugDrawCono = false;
 
-    // Métricas por frame
-    private int m_overlap, m_procesados, m_conoSkip, m_masaSkip, m_losSkip, m_raycasts, m_aplicoFuerza, m_capturados, m_destruidos, m_almacenados;
-
-    // =========================
-    // ESTADO GENERAL
-    // =========================
+    // ========== Estado ==========
     [HideInInspector] public bool aspirando = false;
     private readonly Collider[] _buffer = new Collider[128];
     private readonly List<Collider> _candidatos = new List<Collider>(128);
@@ -125,9 +97,7 @@ public class VacuumController : MonoBehaviour
     private readonly Dictionary<int, float> _cooldownPorId = new Dictionary<int, float>();
     private int _microBasuraContador = 0;
 
-    // =========================
-    // MODOS DE BOQUILLA
-    // =========================
+    // ========== Modos ==========
     public enum ModoBoquilla { Amplio = 0, Precision = 1, Turbo = 2 }
 
     [System.Serializable]
@@ -141,16 +111,14 @@ public class VacuumController : MonoBehaviour
     }
 
     [Header("Modos de Boquilla")]
-    public ParamModo modoAmplio    = new ParamModo { nombre="Amplio",    rangoMax=3.2f, anguloCono=50f, rigidezBase=32f, factorAmortiguacion=1.0f,  fovKick=1.2f, temblorAmplitud=0.012f, consumoPorSegundo=2.0f };
+    public ParamModo modoAmplio    = new ParamModo { nombre="Amplio",    rangoMax=3.2f, anguloCono=60f, rigidezBase=32f, factorAmortiguacion=1.0f,  fovKick=1.2f, temblorAmplitud=0.012f, consumoPorSegundo=2.0f };
     public ParamModo modoPrecision = new ParamModo { nombre="Precisión", rangoMax=2.5f, anguloCono=22f, rigidezBase=48f, factorAmortiguacion=1.05f, fovKick=0.9f, temblorAmplitud=0.010f, consumoPorSegundo=1.4f };
     public ParamModo modoTurbo     = new ParamModo { nombre="Turbo",     rangoMax=3.6f, anguloCono=32f, rigidezBase=60f, factorAmortiguacion=0.95f, fovKick=1.8f, temblorAmplitud=0.018f, consumoPorSegundo=4.0f };
 
     private ModoBoquilla _modo = ModoBoquilla.Amplio;
     private ParamModo _p;
 
-    // =========================
-    // ENERGÍA / RECARGA
-    // =========================
+    // ========== Energía ==========
     [Header("Energía")]
     public float energiaMax = 100f;
     public float energiaInicial = 100f;
@@ -164,9 +132,6 @@ public class VacuumController : MonoBehaviour
     [Header("Triggers (fiabilidad)")]
     public bool asegurarRigidbodyCinematico = true;
 
-    // =========================
-    // UNITY
-    // =========================
     void Start()
     {
         if (cam == null && Camera.main != null) cam = Camera.main;
@@ -176,7 +141,6 @@ public class VacuumController : MonoBehaviour
             camLocalBasePos = cam.transform.localPosition;
         }
 
-        // Asegurar Rigidbody kinemático para triggers si usas CharacterController
         if (asegurarRigidbodyCinematico)
         {
             var rbSelf = GetComponent<Rigidbody>();
@@ -205,7 +169,6 @@ public class VacuumController : MonoBehaviour
 
         if (boquilla == null) { ResetFeedbackIdle(); return; }
 
-        // Consumo por succión
         if (aspirando)
         {
             if (energiaActual <= energiaMinParaAspirar)
@@ -222,18 +185,11 @@ public class VacuumController : MonoBehaviour
 
         if (!aspirando) { ResetFeedbackIdle(); return; }
 
-        // 1) Overlap candidatos
-        m_overlap = Physics.OverlapSphereNonAlloc(
-            boquilla.position, _p.rangoMax, _buffer, capasAspirables, QueryTriggerInteraction.Ignore);
+        // Overlap candidatos
+        m_overlap = Physics.OverlapSphereNonAlloc(boquilla.position, _p.rangoMax, _buffer, capasAspirables, QueryTriggerInteraction.Ignore);
 
-        // Construir lista
         _candidatos.Clear();
-        for (int i = 0; i < m_overlap; i++)
-        {
-            var col = _buffer[i];
-            if (col != null) _candidatos.Add(col);
-            _buffer[i] = null;
-        }
+        for (int i = 0; i < m_overlap; i++) { var c = _buffer[i]; if (c != null) _candidatos.Add(c); _buffer[i] = null; }
         if (_candidatos.Count == 0) { ActualizarFeedback(0); return; }
 
         float half = _p.anguloCono * 0.5f;
@@ -241,7 +197,6 @@ public class VacuumController : MonoBehaviour
         Vector3 capturaCentro = boquilla.position + boquilla.forward * capturaOffset;
         int raycastsDisponibles = maxRaycastsPorFrame;
 
-        // 2) Round-robin
         for (int rrStep = 0; rrStep < toProcess; rrStep++)
         {
             int idx = (rrIndex + rrStep) % _candidatos.Count;
@@ -249,7 +204,7 @@ public class VacuumController : MonoBehaviour
             if (col == null) continue;
 
             Rigidbody rb = col.attachedRigidbody;
-            if (rb == null || rb.isKinematic) continue;
+            if (rb == null) continue; // necesita RB
 
             VacuumObjetivo vo = col.GetComponent<VacuumObjetivo>();
 
@@ -260,13 +215,13 @@ public class VacuumController : MonoBehaviour
             // Cono
             Vector3 toApprox = col.bounds.center - boquilla.position;
             float ang = Vector3.Angle(boquilla.forward, toApprox);
-            if (ang > half) { m_conoSkip++; if (debugDrawCono) DebugDrawRay(boquilla.position, toApprox, new Color(1f,0.6f,0f),0.02f); continue; }
+            if (ang > half) { m_conoSkip++; continue; }
 
-            // Distancia real a esfera de captura
+            // Distancia a esfera de captura
             Vector3 puntoMasCercano = col.ClosestPoint(capturaCentro);
             float dist = Vector3.Distance(puntoMasCercano, capturaCentro);
 
-            // LoS
+            // LoS (opcional)
             if (requiereLineaDeVision)
             {
                 int idCol = col.GetInstanceID();
@@ -286,7 +241,7 @@ public class VacuumController : MonoBehaviour
                         m_raycasts++; raycastsDisponibles--;
                         libre = !hit;
                         losCache[idCol] = new LoSEntry { libre = libre, expira = Time.time + cacheLoS_vidaSeg, ultimaDist = dist };
-                        if (debugDrawRays) DebugDrawRay(boquilla.position, dirLoS * distLoS, libre ? Color.green : Color.red, 0.02f);
+                        if (debugDrawRays) Debug.DrawRay(boquilla.position, dirLoS * distLoS, libre ? Color.green : Color.red, 0.02f, false);
                     }
                 }
                 if (!libre) continue;
@@ -294,8 +249,8 @@ public class VacuumController : MonoBehaviour
 
             m_procesados++;
 
-            // 3) Succión spring-damper (sin resistencia)
-            float t = Mathf.Clamp01(dist / _p.rangoMax); // 0=boquilla..1=rango
+            // Spring-damper
+            float t = Mathf.Clamp01(dist / _p.rangoMax);
             float rigidezBaseDist = _p.rigidezBase * Mathf.Max(0.05f, rigidezPorDistancia.Evaluate(t));
             float multSuc = vo ? vo.MultiplicadorSuccionTotal : 1f;
             float rigidezEf = rigidezBaseDist * multSuc;
@@ -303,23 +258,26 @@ public class VacuumController : MonoBehaviour
             float amortiguacion = _p.factorAmortiguacion * 2f * Mathf.Sqrt(Mathf.Max(0.0001f, rigidezEf * masaEfectiva));
 
             Vector3 x = (boquilla.position - rb.worldCenterOfMass);
-            Vector3 v = rb.linearVelocity;
+            Vector3 v = rb.velocity;
             Vector3 fuerza = (rigidezEf * x) - (amortiguacion * v);
 
             Vector3 acc = fuerza / Mathf.Max(0.0001f, masaEfectiva);
             if (acc.sqrMagnitude > limiteAceleracion * limiteAceleracion)
                 acc = acc.normalized * limiteAceleracion;
 
+            // 🔹 Notificar al puente NavMesh↔Física ANTES de aplicar fuerza
             var link = col.GetComponent<NavAgentSuctionLink>();
-            if (link != null)
-            {
-                link.NotificarSuccionTick();
-            }
+            if (link != null) link.NotificarSuccionTick();
+
+            // (Botón rojo de diagnóstico: descomenta si sigue sin moverse con tu prefab)
+            // var ag = col.GetComponent<UnityEngine.AI.NavMeshAgent>();
+            // if (ag && ag.enabled) { ag.isStopped = true; ag.enabled = false; }
+            // if (rb.isKinematic)   { rb.isKinematic = false; rb.useGravity = true; }
+
             rb.AddForce(acc * rb.mass, ForceMode.Force);
             m_aplicoFuerza++;
-            if (debugDrawRays) DebugDrawRay(rb.worldCenterOfMass, acc, Color.cyan, 0.02f);
 
-            // 4) Snap cercano
+            // Snap cercano
             if (dist < distanciaSnap && mezclaSnap > 0f)
             {
                 Vector3 target = Vector3.MoveTowards(rb.position, boquilla.position, snapVelocidad * Time.fixedDeltaTime);
@@ -327,7 +285,7 @@ public class VacuumController : MonoBehaviour
                 rb.MovePosition(rb.position + delta);
             }
 
-            // 5) Captura inmediata al entrar en la boca
+            // Captura
             if (dist < radioZonaCaptura)
             {
                 int idRb = rb.GetInstanceID();
@@ -340,7 +298,6 @@ public class VacuumController : MonoBehaviour
 
                 m_capturados++;
 
-                // SFX/VFX por material
                 if (vo && vo.material)
                 {
                     if (vo.material.vfxCapturaPrefab) Instantiate(vo.material.vfxCapturaPrefab, puntoMasCercano, Quaternion.identity);
@@ -365,7 +322,7 @@ public class VacuumController : MonoBehaviour
                 {
                     if (_contenedor.Count < capacidadMax)
                     {
-                        rb.linearVelocity = Vector3.zero;
+                        rb.velocity = Vector3.zero;
                         rb.angularVelocity = Vector3.zero;
                         rb.isKinematic = true;
                         rb.useGravity = false;
@@ -375,8 +332,8 @@ public class VacuumController : MonoBehaviour
                             raizDestruir.transform.SetParent(contenedorInterno, worldPositionStays: true);
 
                         _contenedor.Add(raizDestruir);
-                        m_almacenados++;
                         OnCapturadoNormal?.Invoke(raizDestruir);
+                        m_almacenados++;
                     }
                     else
                     {
@@ -390,9 +347,6 @@ public class VacuumController : MonoBehaviour
         ActualizarFeedback(m_aplicoFuerza);
     }
 
-    // =========================
-    // ENERGÍA
-    // =========================
     private void ModEnergia(float delta)
     {
         float prev = energiaActual;
@@ -401,9 +355,6 @@ public class VacuumController : MonoBehaviour
             OnEnergiaCambiada?.Invoke(energiaActual / Mathf.Max(0.0001f, energiaMax));
     }
 
-    // =========================
-    // FEEDBACK
-    // =========================
     private void ActualizarFeedback(int objetosConFuerza)
     {
         float carga = Mathf.Clamp01(objetosConFuerza / 8f);
@@ -423,19 +374,16 @@ public class VacuumController : MonoBehaviour
             perlinT += Time.deltaTime * temblorFrecuencia * Mathf.Max(0.01f, carga);
             float nx = Mathf.PerlinNoise(perlinT, 0f) * 2f - 1f;
             float ny = Mathf.PerlinNoise(0f, perlinT) * 2f - 1f;
-            Vector3 objetivo = camLocalBasePos + new Vector3(nx, ny, 0f) * (_p.temblorAmplitud * carga);
+            Vector3 objetivo = camLocalBasePos + new Vector3(nx, ny, 0f) * (temblorAmplitud * carga);
             cam.transform.localPosition = Vector3.Lerp(cam.transform.localPosition, objetivo, Time.deltaTime * temblorSuavizado);
 
-            float targetFOV = fovBase + _p.fovKick * carga;
+            float targetFOV = fovBase + fovKick * carga;
             cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFOV, Time.deltaTime * fovRecuperacion);
         }
     }
 
     private void ResetFeedbackIdle() { /* intencionalmente vacío */ }
 
-    // =========================
-    // API: SUCCIÓN
-    // =========================
     public void IniciarSuccion()
     {
         if (energiaActual <= energiaMinParaAspirar) return;
@@ -456,9 +404,6 @@ public class VacuumController : MonoBehaviour
         }
     }
 
-    // =========================
-    // API: MODOS
-    // =========================
     public void SiguienteModo()
     {
         var next = (int)_modo + 1;
@@ -489,9 +434,6 @@ public class VacuumController : MonoBehaviour
         OnEnergiaCambiada?.Invoke(energiaActual / Mathf.Max(0.0001f, energiaMax));
     }
 
-    // =========================
-    // MÉTRICAS / DEBUG
-    // =========================
     private void ReiniciarMetricas()
     {
         m_overlap = m_procesados = m_conoSkip = m_masaSkip = m_losSkip = m_raycasts = m_aplicoFuerza = m_capturados = m_destruidos = m_almacenados = 0;
@@ -500,12 +442,9 @@ public class VacuumController : MonoBehaviour
     void OnGUI()
     {
         if (!debugOverlayGUI) return;
-
-        const int pad = 8;
-        int y = pad;
+        const int pad = 8; int y = pad;
         GUI.color = Color.white;
-        string modoTxt = _p != null ? _p.nombre : _modo.ToString();
-        GUI.Label(new Rect(pad, y, 760, 22), $"Vacuum: {(aspirando ? "ON" : "OFF")}  |  Modo: {modoTxt}  |  Energía: {energiaActual:0}/{energiaMax:0} ({(energiaActual/Mathf.Max(1,energiaMax))*100f:0}%)");
+        GUI.Label(new Rect(pad, y, 760, 22), $"Vacuum: {(aspirando ? "ON" : "OFF")} | Energía: {energiaActual:0}/{energiaMax:0} ({(energiaActual/Mathf.Max(1,energiaMax))*100f:0}%)");
         y += 18;
         GUI.Label(new Rect(pad, y, 760, 22), $"Rango:{_p.rangoMax:0.0}m  Cono:{_p.anguloCono:0}°  CapturaR:{radioZonaCaptura:0.00}  Offset:{capturaOffset:0.00}  Capacidad:{_contenedor.Count}/{capacidadMax}");
         y += 18;
@@ -541,11 +480,5 @@ public class VacuumController : MonoBehaviour
             Gizmos.DrawLine(boquilla.position, boquilla.position + (q3 * boquilla.forward) * r);
             Gizmos.DrawLine(boquilla.position, boquilla.position + (q4 * boquilla.forward) * r);
         }
-    }
-
-    private void DebugDrawRay(Vector3 from, Vector3 vec, Color c, float persist)
-    {
-        if (!debugDrawRays) return;
-        Debug.DrawRay(from, vec, c, persist, false);
     }
 }
