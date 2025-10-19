@@ -89,6 +89,9 @@ public class PlayerControllerFPS_DualJoystick : MonoBehaviour
     private float bobTimer;
     private float giroOffsetX;      // Offset lateral por giro (se suma al head-bob)
 
+    // NUEVO: offset de inclinación aplicado SOLO por aspirar (no bloquea el pitch)
+    private float aspirarTiltOffset = 0f;
+
     void Awake()
     {
         controller = GetComponent<CharacterController>();
@@ -146,7 +149,7 @@ public class PlayerControllerFPS_DualJoystick : MonoBehaviour
         pitch = Mathf.Clamp(pitch, limitesPitch.x, limitesPitch.y);
 
         Vector3 camEuler = transformCamara.localEulerAngles;
-        camEuler.x = pitch;
+        camEuler.x = pitch + aspirarTiltOffset; // << usa el offset en lugar de sobrescribir desde la corutina
         camEuler.y = 0f;
         camEuler.z = 0f; // el roll se añade en el feedback de giro
         transformCamara.localEulerAngles = camEuler;
@@ -239,7 +242,7 @@ public class PlayerControllerFPS_DualJoystick : MonoBehaviour
         Vector3 e = transformCamara.localEulerAngles;
         float rollActual = (e.z > 180f) ? e.z - 360f : e.z;
         float nuevoRoll = Mathf.Lerp(rollActual, rollObjetivo, Time.deltaTime * giroSuavizado);
-        transformCamara.localEulerAngles = new Vector3(pitch, 0f, nuevoRoll);
+        transformCamara.localEulerAngles = new Vector3(pitch + aspirarTiltOffset, 0f, nuevoRoll); // << respeta offset
 
         if (camara != null && usarGiroFOVKick)
         {
@@ -292,18 +295,21 @@ public class PlayerControllerFPS_DualJoystick : MonoBehaviour
     }
 
     // ========== CORUTINA ZOOM/INCLINACIÓN (ASPIRAR) ==========
+    // AHORA: no toca la rotación de la cámara; solo FOV y un offset acumulado
     private System.Collections.IEnumerator EfectoVisualAspirar(bool activando)
     {
-        float durZoom  = activando ? aspirarTiempoZoom : aspirarTiempoZoom * 0.6f;
+        float durZoom  = activando ? aspirarTiempoZoom        : aspirarTiempoZoom * 0.6f;
         float durTilt  = activando ? aspirarTiempoInclinacion : aspirarTiempoInclinacion * 0.6f;
 
         float tiempo = 0f;
 
-        float fovInicio = camara.fieldOfView;
+        // FOV
+        float fovInicio   = camara.fieldOfView;
         float fovObjetivo = activando ? fovBase - aspirarZoomFOV : fovBase;
 
-        Vector3 rotInicio = transformCamara.localEulerAngles;
-        Vector3 rotObjetivo = rotInicio + (activando ? new Vector3(aspirarInclinacionGrados, 0f, 0f) : new Vector3(-aspirarInclinacionGrados, 0f, 0f));
+        // Tilt-offset (no modificamos la rotación aquí)
+        float tiltInicio   = aspirarTiltOffset;
+        float tiltObjetivo = activando ? aspirarInclinacionGrados : 0f;
 
         while (tiempo < Mathf.Max(durZoom, durTilt))
         {
@@ -317,14 +323,12 @@ public class PlayerControllerFPS_DualJoystick : MonoBehaviour
             tTilt = 1f - Mathf.Pow(1f - tTilt, 3f);
 
             camara.fieldOfView = Mathf.Lerp(fovInicio, fovObjetivo, tZoom);
-            Vector3 rotActual = Vector3.Lerp(rotInicio, rotObjetivo, tTilt);
-
-            // Mantiene roll de giro y pitch real
-            transformCamara.localEulerAngles = new Vector3(rotActual.x, 0f, transformCamara.localEulerAngles.z);
+            aspirarTiltOffset  = Mathf.Lerp(tiltInicio, tiltObjetivo, tTilt);
 
             yield return null;
         }
 
         camara.fieldOfView = fovObjetivo; // se queda en el máximo mientras sigas aspirando
+        aspirarTiltOffset  = tiltObjetivo;
     }
 }
