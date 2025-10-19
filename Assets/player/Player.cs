@@ -3,6 +3,9 @@ using UnityEngine;
 [RequireComponent(typeof(CharacterController))]
 public class PlayerControllerFPS_DualJoystick : MonoBehaviour
 {
+
+    public Animator anim;
+
     // =========================
     // MOVIMIENTO
     // =========================
@@ -94,6 +97,7 @@ public class PlayerControllerFPS_DualJoystick : MonoBehaviour
 
     void Awake()
     {
+
         controller = GetComponent<CharacterController>();
 
         if (transformCamara == null && Camera.main != null)
@@ -275,6 +279,8 @@ public class PlayerControllerFPS_DualJoystick : MonoBehaviour
         if (aspirando) return;
         aspirando = true;
 
+        if (anim != null) anim.SetBool("Aspirando", true);
+
         if (camara != null)
         {
             StopAllCoroutines();
@@ -286,6 +292,8 @@ public class PlayerControllerFPS_DualJoystick : MonoBehaviour
     {
         if (!aspirando) return;
         aspirando = false;
+
+        if (anim != null) anim.SetBool("Aspirando", false);
 
         if (camara != null)
         {
