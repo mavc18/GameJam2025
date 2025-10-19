@@ -51,7 +51,7 @@ public class PlayerControllerFPS_DualJoystick : MonoBehaviour
     // ASPIRAR (velocidad + zoom/tilt)
     // =========================
     [Header("Aspirar (velocidad + zoom/tilt)")]
-    public bool aspirando = false;
+    [SerializeField] public bool aspirando = false; 
     public float multiplicadorVelocidadAspirando = 0.6f;
 
     [Tooltip("Cuántos grados reduce el FOV al aspirar (zoom).")]
