@@ -4,7 +4,7 @@ using UnityEngine.AI;
 
 public class TrashSpawner : MonoBehaviour
 {
-    [Header("Prefabs de basura (se elige aleatorio)")]
+    [Header("Prefabs de basura (aleatorio)")]
     public List<GameObject> prefabs;
 
     [Header("Cantidad a spawnear al iniciar")]
@@ -20,7 +20,7 @@ public class TrashSpawner : MonoBehaviour
     public float alturaRaycast = 4f;
 
     [Header("NavMesh")]
-    public float maxDesvioNavMesh = 2.0f; // radio de búsqueda para SamplePosition
+    public float maxDesvioNavMesh = 2.0f; // radio para SamplePosition
     public LayerMask groundMask = ~0;
     public Transform player; // opcional: para asignar a la IA
 
@@ -28,7 +28,7 @@ public class TrashSpawner : MonoBehaviour
     public float separacionMin = 1.0f;
     public int intentosPorBasura = 20;
 
-    private List<GameObject> _instanciados = new List<GameObject>();
+    private readonly List<GameObject> _instanciados = new List<GameObject>();
 
     void Start()
     {
@@ -53,7 +53,6 @@ public class TrashSpawner : MonoBehaviour
 
         if (usarPuntos)
         {
-            // Spawnear 1 por punto (o hasta 'cantidad' si hay más)
             int total = Mathf.Min(cantidad, puntosSpawn.Length);
             for (int i = 0; i < total; i++)
             {
@@ -64,7 +63,6 @@ public class TrashSpawner : MonoBehaviour
         }
         else
         {
-            // Spawnear dentro de un área rectangular
             for (int i = 0; i < cantidad; i++)
             {
                 bool colocado = false;
@@ -76,15 +74,12 @@ public class TrashSpawner : MonoBehaviour
                         Random.Range(-areaTam.z * 0.5f, areaTam.z * 0.5f)
                     );
 
-                    // Raycast hacia abajo para aproximar el piso
                     Vector3 posRay = rnd + Vector3.up * alturaRaycast;
                     if (Physics.Raycast(posRay, Vector3.down, out var hit, alturaRaycast * 2f, groundMask, QueryTriggerInteraction.Ignore))
                     {
                         Vector3 pos = hit.point;
-                        // Mover a NavMesh cercano
                         if (NavMesh.SamplePosition(pos, out var nmHit, maxDesvioNavMesh, NavMesh.AllAreas))
                         {
-                            // Chequear separación con ya colocados
                             if (EsPosValida(nmHit.position))
                             {
                                 InstanciarEnNavMesh(nmHit.position, Quaternion.Euler(0f, Random.Range(0f, 360f), 0f));
@@ -119,9 +114,19 @@ public class TrashSpawner : MonoBehaviour
         GameObject go = Instantiate(prefab, pos, rot);
         _instanciados.Add(go);
 
-        // Si tiene IA, pásale el player
+        // Asignar Player a la IA si está
         var ai = go.GetComponent<TrashAI>();
         if (ai && player) ai.player = player;
+
+        // Estado inicial: Agent activo, RB kinematic (NavAgentSuctionLink lo ajusta)
+        var rb = go.GetComponent<Rigidbody>();
+        var agent = go.GetComponent<NavMeshAgent>();
+        if (agent && rb)
+        {
+            rb.isKinematic = true;
+            rb.useGravity = true;
+            agent.enabled = true;
+        }
     }
 
     public void LimpiarInstancias()
