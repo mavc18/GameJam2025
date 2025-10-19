@@ -57,8 +57,8 @@ public class VacuumController : MonoBehaviour
     public bool destruirMicroBasura = true;
     public bool destruirTodosAlCapturar = false;
     public float cooldownCaptura = 0.1f;
-    public float masaMaxAspirable = 100f; // subido para evitar bloqueos
-    public bool requiereLineaDeVision = false; // para pruebas: OFF; luego ON
+    public float masaMaxAspirable = 100f; // alto para evitar bloqueos mientras pruebas
+    public bool requiereLineaDeVision = false; // para pruebas: OFF; luego ON si quieres
 
     // ========== Capas ==========
     [Header("Capas")]
@@ -96,6 +96,9 @@ public class VacuumController : MonoBehaviour
     private readonly List<GameObject> _contenedor = new List<GameObject>();
     private readonly Dictionary<int, float> _cooldownPorId = new Dictionary<int, float>();
     private int _microBasuraContador = 0;
+
+    // Métricas por frame (incluye m_almacenados para evitar CS0103)
+    private int m_overlap, m_procesados, m_conoSkip, m_masaSkip, m_losSkip, m_raycasts, m_aplicoFuerza, m_capturados, m_destruidos, m_almacenados;
 
     // ========== Modos ==========
     public enum ModoBoquilla { Amplio = 0, Precision = 1, Turbo = 2 }
@@ -141,6 +144,7 @@ public class VacuumController : MonoBehaviour
             camLocalBasePos = cam.transform.localPosition;
         }
 
+        // Asegurar un RB kinemático en el player si usas CharacterController y triggers
         if (asegurarRigidbodyCinematico)
         {
             var rbSelf = GetComponent<Rigidbody>();
@@ -169,6 +173,7 @@ public class VacuumController : MonoBehaviour
 
         if (boquilla == null) { ResetFeedbackIdle(); return; }
 
+        // Consumo / estado
         if (aspirando)
         {
             if (energiaActual <= energiaMinParaAspirar)
@@ -189,7 +194,12 @@ public class VacuumController : MonoBehaviour
         m_overlap = Physics.OverlapSphereNonAlloc(boquilla.position, _p.rangoMax, _buffer, capasAspirables, QueryTriggerInteraction.Ignore);
 
         _candidatos.Clear();
-        for (int i = 0; i < m_overlap; i++) { var c = _buffer[i]; if (c != null) _candidatos.Add(c); _buffer[i] = null; }
+        for (int i = 0; i < m_overlap; i++)
+        {
+            var c = _buffer[i];
+            if (c != null) _candidatos.Add(c);
+            _buffer[i] = null;
+        }
         if (_candidatos.Count == 0) { ActualizarFeedback(0); return; }
 
         float half = _p.anguloCono * 0.5f;
@@ -208,11 +218,11 @@ public class VacuumController : MonoBehaviour
 
             VacuumObjetivo vo = col.GetComponent<VacuumObjetivo>();
 
-            // Masa filtro
+            // Filtro por masa
             float masaEfectiva = vo ? vo.MasaEfectiva(rb) : rb.mass;
             if (masaEfectiva > masaMaxAspirable) { m_masaSkip++; continue; }
 
-            // Cono
+            // Filtro por cono
             Vector3 toApprox = col.bounds.center - boquilla.position;
             float ang = Vector3.Angle(boquilla.forward, toApprox);
             if (ang > half) { m_conoSkip++; continue; }
@@ -221,7 +231,7 @@ public class VacuumController : MonoBehaviour
             Vector3 puntoMasCercano = col.ClosestPoint(capturaCentro);
             float dist = Vector3.Distance(puntoMasCercano, capturaCentro);
 
-            // LoS (opcional)
+            // Línea de visión (opcional)
             if (requiereLineaDeVision)
             {
                 int idCol = col.GetInstanceID();
@@ -249,8 +259,8 @@ public class VacuumController : MonoBehaviour
 
             m_procesados++;
 
-            // Spring-damper
-            float t = Mathf.Clamp01(dist / _p.rangoMax);
+            // Spring-damper hacia la boquilla (sin resistencia al suelo)
+            float t = Mathf.Clamp01(dist / _p.rangoMax); // 0=boquilla..1=rango
             float rigidezBaseDist = _p.rigidezBase * Mathf.Max(0.05f, rigidezPorDistancia.Evaluate(t));
             float multSuc = vo ? vo.MultiplicadorSuccionTotal : 1f;
             float rigidezEf = rigidezBaseDist * multSuc;
@@ -258,18 +268,18 @@ public class VacuumController : MonoBehaviour
             float amortiguacion = _p.factorAmortiguacion * 2f * Mathf.Sqrt(Mathf.Max(0.0001f, rigidezEf * masaEfectiva));
 
             Vector3 x = (boquilla.position - rb.worldCenterOfMass);
-            Vector3 v = rb.velocity;
+            Vector3 v = rb.linearVelocity;
             Vector3 fuerza = (rigidezEf * x) - (amortiguacion * v);
 
             Vector3 acc = fuerza / Mathf.Max(0.0001f, masaEfectiva);
             if (acc.sqrMagnitude > limiteAceleracion * limiteAceleracion)
                 acc = acc.normalized * limiteAceleracion;
 
-            // 🔹 Notificar al puente NavMesh↔Física ANTES de aplicar fuerza
+            // Notificar al puente NavMesh↔Física ANTES de aplicar fuerza
             var link = col.GetComponent<NavAgentSuctionLink>();
             if (link != null) link.NotificarSuccionTick();
 
-            // (Botón rojo de diagnóstico: descomenta si sigue sin moverse con tu prefab)
+            // (Botón rojo de diagnóstico: si aún no se mueve, descomenta)
             // var ag = col.GetComponent<UnityEngine.AI.NavMeshAgent>();
             // if (ag && ag.enabled) { ag.isStopped = true; ag.enabled = false; }
             // if (rb.isKinematic)   { rb.isKinematic = false; rb.useGravity = true; }
@@ -298,6 +308,7 @@ public class VacuumController : MonoBehaviour
 
                 m_capturados++;
 
+                // SFX/VFX por material
                 if (vo && vo.material)
                 {
                     if (vo.material.vfxCapturaPrefab) Instantiate(vo.material.vfxCapturaPrefab, puntoMasCercano, Quaternion.identity);
@@ -322,7 +333,7 @@ public class VacuumController : MonoBehaviour
                 {
                     if (_contenedor.Count < capacidadMax)
                     {
-                        rb.velocity = Vector3.zero;
+                        rb.linearVelocity = Vector3.zero;
                         rb.angularVelocity = Vector3.zero;
                         rb.isKinematic = true;
                         rb.useGravity = false;
@@ -333,7 +344,7 @@ public class VacuumController : MonoBehaviour
 
                         _contenedor.Add(raizDestruir);
                         OnCapturadoNormal?.Invoke(raizDestruir);
-                        m_almacenados++;
+                        m_almacenados++; // <<<<<< MÉTRICA: ahora existe y no da CS0103
                     }
                     else
                     {

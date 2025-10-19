@@ -16,7 +16,7 @@ public class VacuumObjetivo : MonoBehaviour
     [Tooltip("Si lo asignas, este objeto será el que se desactive/destruya al capturar. Si no, se usa el root del Rigidbody.")]
     public GameObject raizParaDestruir;
 
-    // ---------- Helpers ----------
+    // Helpers
     public bool EsCapturable => material ? material.capturable : true;
     public bool EsMicroBasura => material ? material.microBasura : true;
 

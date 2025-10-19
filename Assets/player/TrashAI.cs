@@ -9,7 +9,7 @@ public class TrashAI : MonoBehaviour
 
     [Header("Percepción / Huida")]
     public float radioPercepcion = 10f;     // si el player entra aquí, huye
-    public float distanciaHuida = 8f;       // cuánto quiere alejarse en cada escape
+    public float distanciaHuida = 8f;       // cuánto quiere alejarse por intento
     public float cooldownRecalculo = 0.6f;  // evita recalcular cada frame
 
     [Header("Vagar cuando lejos")]
@@ -19,12 +19,11 @@ public class TrashAI : MonoBehaviour
     [Header("NavMeshAgent ajustes")]
     public float velocidadCorrer = 5.5f;
     public float velocidadVagar = 2.2f;
-    public float alturaSample = 1.0f;       // para proyectar en NavMesh
+    public float alturaSample = 1.0f;
 
     private NavMeshAgent agent;
     private float tRecalculo;
     private float tVagar;
-    private Vector3 ultimoDestino;
 
     void Awake()
     {
@@ -38,9 +37,7 @@ public class TrashAI : MonoBehaviour
             var p = GameObject.FindGameObjectWithTag("Player");
             if (p) player = p.transform;
         }
-
-        // Primera meta “vagar” para que no se queden quietos al inicio
-        SetDestinoVagar();
+        SetDestinoVagar(); // arranca moviéndose
     }
 
     void Update()
@@ -61,7 +58,6 @@ public class TrashAI : MonoBehaviour
                 HuirDelPlayer();
                 tRecalculo = cooldownRecalculo;
             }
-
             if (agent.speed != velocidadCorrer) agent.speed = velocidadCorrer;
         }
         else
@@ -71,7 +67,6 @@ public class TrashAI : MonoBehaviour
                 SetDestinoVagar();
                 tVagar = tiempoEntreVagar;
             }
-
             if (agent.speed != velocidadVagar) agent.speed = velocidadVagar;
         }
     }
@@ -80,7 +75,7 @@ public class TrashAI : MonoBehaviour
     {
         Vector3 dir = (transform.position - player.position);
         dir.y = 0f;
-        if (dir.sqrMagnitude < 0.01f) dir = Random.insideUnitSphere; // por si están encima
+        if (dir.sqrMagnitude < 0.01f) dir = Random.insideUnitSphere;
 
         dir.Normalize();
         Vector3 candidato = transform.position + dir * distanciaHuida;
@@ -91,7 +86,6 @@ public class TrashAI : MonoBehaviour
         }
         else
         {
-            // fallback: algún punto aleatorio
             SetDestinoVagar();
         }
     }
@@ -100,14 +94,12 @@ public class TrashAI : MonoBehaviour
     {
         Vector3 rnd = transform.position + Random.insideUnitSphere * radioVagar;
         rnd.y = transform.position.y;
-
         if (NavMesh.SamplePosition(rnd, out var hit, alturaSample + radioVagar, NavMesh.AllAreas))
             SetDestino(hit.position);
     }
 
     private void SetDestino(Vector3 pos)
     {
-        ultimoDestino = pos;
         agent.isStopped = false;
         agent.SetDestination(pos);
     }

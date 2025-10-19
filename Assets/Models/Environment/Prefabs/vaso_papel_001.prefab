@@ -59,9 +59,6 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 49b71418dfb9aa344a40e4f006be571c, type: 3}
       insertIndex: -1
       addedObject: {fileID: 8882563473948992925}
-    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 49b71418dfb9aa344a40e4f006be571c, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 6247537091875835606}
   m_SourcePrefab: {fileID: 100100000, guid: 49b71418dfb9aa344a40e4f006be571c, type: 3}
 --- !u!1 &298343974887558223 stripped
 GameObject:
@@ -84,33 +81,3 @@ MonoBehaviour:
   masaVirtualOverride: 0
   multiplicadorSuccionExtra: 1
   raizParaDestruir: {fileID: 0}
-  resistencia: 3
-  regeneracionResistencia: 1
-  multiplicadorResistencia: 1
-  progresoActual: 0
-  enLucha: 0
-  resistirSoloEnSuelo: 1
-  adhesionAceleracion: 12
-  capturarInmediatoAlDespegar: 1
---- !u!195 &6247537091875835606
-NavMeshAgent:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 298343974887558223}
-  m_Enabled: 1
-  m_AgentTypeID: 0
-  m_Radius: 0.094479896
-  m_Speed: 3.5
-  m_Acceleration: 8
-  avoidancePriority: 50
-  m_AngularSpeed: 120
-  m_StoppingDistance: 0
-  m_AutoTraverseOffMeshLink: 1
-  m_AutoBraking: 1
-  m_AutoRepath: 1
-  m_Height: 1.0640546
-  m_BaseOffset: 0.5320273
-  m_WalkableMask: 4294967295
-  m_ObstacleAvoidanceType: 4
