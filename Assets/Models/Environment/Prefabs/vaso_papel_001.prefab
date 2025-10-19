@@ -1,0 +1,116 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1001 &640223159517196574
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: -8679921383154817045, guid: 49b71418dfb9aa344a40e4f006be571c, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -7.648344
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 49b71418dfb9aa344a40e4f006be571c, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -0.00055439235
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 49b71418dfb9aa344a40e4f006be571c, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -22.051008
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 49b71418dfb9aa344a40e4f006be571c, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 49b71418dfb9aa344a40e4f006be571c, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 49b71418dfb9aa344a40e4f006be571c, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 49b71418dfb9aa344a40e4f006be571c, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 49b71418dfb9aa344a40e4f006be571c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 49b71418dfb9aa344a40e4f006be571c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 49b71418dfb9aa344a40e4f006be571c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: 49b71418dfb9aa344a40e4f006be571c, type: 3}
+      propertyPath: m_Name
+      value: vaso_papel_001
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 49b71418dfb9aa344a40e4f006be571c, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 8882563473948992925}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 49b71418dfb9aa344a40e4f006be571c, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 6247537091875835606}
+  m_SourcePrefab: {fileID: 100100000, guid: 49b71418dfb9aa344a40e4f006be571c, type: 3}
+--- !u!1 &298343974887558223 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: 49b71418dfb9aa344a40e4f006be571c, type: 3}
+  m_PrefabInstance: {fileID: 640223159517196574}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &8882563473948992925
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 298343974887558223}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ba51e521de492b9419c2732f529929de, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::VacuumObjetivo
+  material: {fileID: 0}
+  masaVirtualOverride: 0
+  multiplicadorSuccionExtra: 1
+  raizParaDestruir: {fileID: 0}
+  resistencia: 3
+  regeneracionResistencia: 1
+  multiplicadorResistencia: 1
+  progresoActual: 0
+  enLucha: 0
+  resistirSoloEnSuelo: 1
+  adhesionAceleracion: 12
+  capturarInmediatoAlDespegar: 1
+--- !u!195 &6247537091875835606
+NavMeshAgent:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 298343974887558223}
+  m_Enabled: 1
+  m_AgentTypeID: 0
+  m_Radius: 0.094479896
+  m_Speed: 3.5
+  m_Acceleration: 8
+  avoidancePriority: 50
+  m_AngularSpeed: 120
+  m_StoppingDistance: 0
+  m_AutoTraverseOffMeshLink: 1
+  m_AutoBraking: 1
+  m_AutoRepath: 1
+  m_Height: 1.0640546
+  m_BaseOffset: 0.5320273
+  m_WalkableMask: 4294967295
+  m_ObstacleAvoidanceType: 4

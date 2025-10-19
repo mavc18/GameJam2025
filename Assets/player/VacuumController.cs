@@ -37,7 +37,7 @@ public class VacuumController : MonoBehaviour
     // =========================
     // GEOMETRÍA BASE
     // =========================
-    [Header("Geometría de succión (base)")]
+    [Header("Geometría de succión")]
     public float rangoMax = 3.0f;                  // m
     [Tooltip("Ángulo total del cono (grados).")]
     public float anguloCono = 30f;                 // total
@@ -46,9 +46,9 @@ public class VacuumController : MonoBehaviour
     public float capturaOffset = 0.05f;            // m
 
     // =========================
-    // FÍSICA BASE
+    // FÍSICA
     // =========================
-    [Header("Física (base)")]
+    [Header("Física")]
     [Tooltip("Rigidez base del resorte (25–60 recomendado).")]
     public float rigidezBase = 40f;
     [Tooltip("Curva de rigidez según distancia (input: 0=boquilla, 1=rango).")]
@@ -81,8 +81,6 @@ public class VacuumController : MonoBehaviour
     [Header("Capas")]
     public LayerMask capasAspirables;            // "Basura"
     public LayerMask capasBloqueo;               // "Entorno"
-    [Tooltip("Capas consideradas como suelo para detectar 'pegado'.")]
-    public LayerMask capasSuelo;                 // e.g., Ground, Default
 
     // =========================
     // EVENTOS
@@ -113,11 +111,6 @@ public class VacuumController : MonoBehaviour
     public bool debugOverlayGUI = true;
     public bool debugDrawRays = false;
     public bool debugDrawCono = false;
-
-    [Header("Debug suelo (opcional)")]
-    public bool debugDrawSuelo = false;          // dibuja rayos de suelo por objeto
-    public Color debugSueloHitColor = Color.yellow;
-    public Color debugSueloMissColor = new Color(1f, 0.5f, 0f);
 
     // Métricas por frame
     private int m_overlap, m_procesados, m_conoSkip, m_masaSkip, m_losSkip, m_raycasts, m_aplicoFuerza, m_capturados, m_destruidos, m_almacenados;
@@ -170,24 +163,6 @@ public class VacuumController : MonoBehaviour
 
     [Header("Triggers (fiabilidad)")]
     public bool asegurarRigidbodyCinematico = true;
-
-    // =========================
-    // RESISTENCIA / LUCHA (sistema)
-    // =========================
-    [Header("Resistencia / Lucha (sistema)")]
-    public bool usarResistencia = true;
-
-    [Tooltip("Distancia desde la boquilla donde comienza la lucha (m).")]
-    public float distanciaInicioLucha = 1.2f;
-
-    [Tooltip("Velocidad base con la que 'ganas' la lucha a intensidad 1 (u/s).")]
-    public float luchaGananciaBasePorSeg = 1.0f;
-
-    [Tooltip("Escala adicional por cercanía (input: 0=boquilla, 1=rango).")]
-    public AnimationCurve luchaEscalaPorCercania = AnimationCurve.EaseInOut(0, 1, 1, 0.4f);
-
-    [Tooltip("Margen extra del raycast para detectar suelo bajo el objeto (m).")]
-    public float sueloRayExtra = 0.05f;
 
     // =========================
     // UNITY
@@ -319,7 +294,7 @@ public class VacuumController : MonoBehaviour
 
             m_procesados++;
 
-            // 3) Succión spring-damper
+            // 3) Succión spring-damper (sin resistencia)
             float t = Mathf.Clamp01(dist / _p.rangoMax); // 0=boquilla..1=rango
             float rigidezBaseDist = _p.rigidezBase * Mathf.Max(0.05f, rigidezPorDistancia.Evaluate(t));
             float multSuc = vo ? vo.MultiplicadorSuccionTotal : 1f;
@@ -335,54 +310,16 @@ public class VacuumController : MonoBehaviour
             if (acc.sqrMagnitude > limiteAceleracion * limiteAceleracion)
                 acc = acc.normalized * limiteAceleracion;
 
+            var link = col.GetComponent<NavAgentSuctionLink>();
+            if (link != null)
+            {
+                link.NotificarSuccionTick();
+            }
             rb.AddForce(acc * rb.mass, ForceMode.Force);
             m_aplicoFuerza++;
             if (debugDrawRays) DebugDrawRay(rb.worldCenterOfMass, acc, Color.cyan, 0.02f);
 
-            // 4) Lucha / Resistencia (per-objeto con adherencia en suelo)
-            bool enSuelo = EstaEnSuelo(col);
-            bool dentroLucha = usarResistencia && (dist <= Mathf.Max(distanciaInicioLucha, radioZonaCaptura));
-
-            if (usarResistencia && vo != null)
-            {
-                if ((!vo.resistirSoloEnSuelo || enSuelo) && dentroLucha)
-                {
-                    vo.enLucha = true;
-
-                    float escalaCercania = Mathf.Max(0.05f, luchaEscalaPorCercania.Evaluate(1f - t)); // más cerca, mayor
-                    float intensidad = escalaCercania * multSuc / Mathf.Max(0.001f, vo.MultiplicadorResistenciaTotal);
-
-                    // Avance de la lucha
-                    vo.progresoActual += luchaGananciaBasePorSeg * intensidad * Time.fixedDeltaTime;
-                    vo.progresoActual = Mathf.Clamp(vo.progresoActual, 0f, Mathf.Max(0.0001f, vo.resistencia));
-
-                    // Adhesión hacia abajo (proporcional a lo que falta por vencer)
-                    float pct = Mathf.Clamp01(vo.progresoActual / Mathf.Max(0.0001f, vo.resistencia));
-                    float aDown = Mathf.Max(0f, vo.adhesionAceleracion) * (1f - pct);
-                    if (aDown > 0f) rb.AddForce(Vector3.down * aDown * rb.mass, ForceMode.Force);
-                }
-                else
-                {
-                    // No lucha (por distancia o por no estar en suelo)
-                    if (vo.enLucha && enSuelo)
-                    {
-                        // Si aún toca piso pero no está en zona de lucha, decae progreso
-                        vo.progresoActual = Mathf.Max(0f, vo.progresoActual - vo.regeneracionResistencia * Time.fixedDeltaTime);
-                        if (vo.progresoActual <= 0.0001f) vo.enLucha = false;
-                    }
-                    else
-                    {
-                        // Si NO está en suelo => se considera "despegado": lucha vencida (si el objeto lo permite)
-                        if (!enSuelo && vo.capturarInmediatoAlDespegar)
-                        {
-                            vo.progresoActual = Mathf.Max(vo.progresoActual, Mathf.Max(0.0001f, vo.resistencia));
-                            vo.enLucha = false;
-                        }
-                    }
-                }
-            }
-
-            // 5) Snap cercano
+            // 4) Snap cercano
             if (dist < distanciaSnap && mezclaSnap > 0f)
             {
                 Vector3 target = Vector3.MoveTowards(rb.position, boquilla.position, snapVelocidad * Time.fixedDeltaTime);
@@ -390,15 +327,9 @@ public class VacuumController : MonoBehaviour
                 rb.MovePosition(rb.position + delta);
             }
 
-            // 6) Captura (requiere haber vencido resistencia si está activa)
+            // 5) Captura inmediata al entrar en la boca
             if (dist < radioZonaCaptura)
             {
-                bool listoPorResistencia = true;
-                if (usarResistencia && vo != null)
-                    listoPorResistencia = vo.progresoActual >= Mathf.Max(0.0001f, vo.resistencia);
-
-                if (!listoPorResistencia) continue;
-
                 int idRb = rb.GetInstanceID();
                 if (_cooldownPorId.TryGetValue(idRb, out float tReady) && Time.time < tReady) continue;
                 _cooldownPorId[idRb] = Time.time + cooldownCaptura;
@@ -452,47 +383,11 @@ public class VacuumController : MonoBehaviour
                         OnContenedorLleno?.Invoke();
                     }
                 }
-
-                if (vo != null) { vo.progresoActual = 0f; vo.enLucha = false; }
             }
         }
 
         rrIndex = (rrIndex + toProcess) % Mathf.Max(1, _candidatos.Count);
         ActualizarFeedback(m_aplicoFuerza);
-    }
-
-    // ====== Suelo robusto (5 raycasts: centro + 4 esquinas) ======
-    private bool EstaEnSuelo(Collider col)
-    {
-        Bounds b = col.bounds;
-        float distancia = b.extents.y + sueloRayExtra;
-
-        Vector3 c = b.center;
-        Vector3[] puntos =
-        {
-            c,
-            c + new Vector3( b.extents.x, 0f,  b.extents.z) * 0.7f,
-            c + new Vector3(-b.extents.x, 0f,  b.extents.z) * 0.7f,
-            c + new Vector3( b.extents.x, 0f, -b.extents.z) * 0.7f,
-            c + new Vector3(-b.extents.x, 0f, -b.extents.z) * 0.7f,
-        };
-
-        bool hitAlgo = false;
-        for (int i = 0; i < puntos.Length; i++)
-        {
-            if (Physics.Raycast(puntos[i], Vector3.down, out RaycastHit hit, distancia, capasSuelo, QueryTriggerInteraction.Ignore))
-            {
-                hitAlgo = true;
-                if (debugDrawSuelo) Debug.DrawLine(puntos[i], hit.point, debugSueloHitColor, 0.02f, false);
-                else if (debugDrawRays) Debug.DrawRay(puntos[i], Vector3.down * distancia, Color.green, 0.02f, false);
-                break;
-            }
-            else
-            {
-                if (debugDrawSuelo) Debug.DrawRay(puntos[i], Vector3.down * distancia, debugSueloMissColor, 0.02f, false);
-            }
-        }
-        return hitAlgo;
     }
 
     // =========================
@@ -595,36 +490,6 @@ public class VacuumController : MonoBehaviour
     }
 
     // =========================
-    // TRIGGERS: RECARGA (zonas)
-    // =========================
-    private void OnTriggerEnter(Collider other)
-    {
-        var rz = other.GetComponent<RechargeZone>()
-             ?? other.GetComponentInParent<RechargeZone>()
-             ?? other.GetComponentInChildren<RechargeZone>();
-
-        if (rz != null)
-        {
-            _zonasRecargaDentro++;
-            float tasa = rz.recargaPorSegundo > 0f ? rz.recargaPorSegundo : recargaBasePorSeg;
-            _recargaActualPorSeg = Mathf.Max(_recargaActualPorSeg, tasa);
-        }
-    }
-
-    private void OnTriggerExit(Collider other)
-    {
-        var rz = other.GetComponent<RechargeZone>()
-             ?? other.GetComponentInParent<RechargeZone>()
-             ?? other.GetComponentInChildren<RechargeZone>();
-
-        if (rz != null)
-        {
-            _zonasRecargaDentro = Mathf.Max(0, _zonasRecargaDentro - 1);
-            if (_zonasRecargaDentro <= 0) _recargaActualPorSeg = 0f;
-        }
-    }
-
-    // =========================
     // MÉTRICAS / DEBUG
     // =========================
     private void ReiniciarMetricas()
@@ -646,7 +511,7 @@ public class VacuumController : MonoBehaviour
         y += 18;
         GUI.Label(new Rect(pad, y, 760, 22), $"Overlap:{m_overlap}  Proc:{m_procesados}/{maxObjetosPorFrame}  Raycasts:{m_raycasts}/{maxRaycastsPorFrame}  LoS-skip:{m_losSkip}  Cono-skip:{m_conoSkip}  Masa-skip:{m_masaSkip}");
         y += 18;
-        GUI.Label(new Rect(pad, y, 760, 22), $"Fuerza:{m_aplicoFuerza}  Capt:{m_capturados}  Dest:{m_destruidos}  Store:{m_almacenados}  ZonasRecarga:{_zonasRecargaDentro}  Recarga/s:{(_recargaActualPorSeg>0?_recargaActualPorSeg:recargaBasePorSeg):0.0}");
+        GUI.Label(new Rect(pad, y, 760, 22), $"Fuerza:{m_aplicoFuerza}  Capt:{m_capturados}  Dest:{m_destruidos}  Store:{m_almacenados}");
     }
 
     void OnDrawGizmosSelected()
@@ -678,7 +543,6 @@ public class VacuumController : MonoBehaviour
         }
     }
 
-    // Helper para dibujar rays en modo play
     private void DebugDrawRay(Vector3 from, Vector3 vec, Color c, float persist)
     {
         if (!debugDrawRays) return;
