@@ -2,7 +2,7 @@ using UnityEngine;
 
 public class VacuumObjetivo : MonoBehaviour
 {
-    [Header("Material (opcional)")]
+    [Header("Material (datos por tipo de basura)")]
     public VacuumMaterialData material;
 
     [Header("Overrides (opcionales)")]
@@ -12,11 +12,7 @@ public class VacuumObjetivo : MonoBehaviour
     [Tooltip("Multiplica la facilidad de succión extra (se combina con el material).")]
     public float multiplicadorSuccionExtra = 1f;
 
-    [Header("Destrucción visual")]
-    [Tooltip("Si lo asignas, este objeto será el que se desactive/destruya al capturar. Si no, se usa el root del Rigidbody.")]
-    public GameObject raizParaDestruir;
-
-    // Helpers
+    // Helpers para el controller (con fallbacks seguros)
     public bool EsCapturable => material ? material.capturable : true;
     public bool EsMicroBasura => material ? material.microBasura : true;
 
