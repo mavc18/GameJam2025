@@ -7,100 +7,86 @@ using UnityEngine.Events;
 
 public class VacuumController : MonoBehaviour
 {
-    // ---------------------------
-    // Referencias
-    // ---------------------------
     [Header("Referencias")]
-    public Transform boquilla;                   // Punto en la punta del tubo
-    public Transform contenedorInterno;         // Donde almacenar objetos (si no son micro)
+    public Transform boquilla;
+    public Transform contenedorInterno;
 
-    // ---------------------------
-    // Geometría
-    // ---------------------------
+    [Header("Feedback sensorial")]
+    public AudioSource motorAudio;
+    public ParticleSystem vfxSuccion;
+    public Camera cam;
+    [Range(0f, 5f)] public float temblorIntensidad = 0.1f;
+    [Range(0f, 5f)] public float fovKick = 1.5f;
+    public float fovRecuperacion = 4f;
+
+    // Temblor Perlin (suave)
+    [Header("Temblor (Perlin)")]
+    public float temblorAmplitud = 0.02f;
+    public float temblorFrecuencia = 9f;
+    public float temblorSuavizado = 12f;
+
+    private float fovBase;
+    private float temblorT;
+    private Vector3 camLocalBasePos;
+
     [Header("Geometría de succión")]
     public float rangoMax = 3.0f;
-    [Tooltip("Ángulo total del cono (grados).")]
     public float anguloCono = 30f;
     public float radioZonaCaptura = 0.35f;
 
-    // ---------------------------
-    // Física híbrida
-    // ---------------------------
-    [Header("Física de succión (spring-damper + asistencia)")]
-    [Tooltip("Rigidez base del 'resorte'. (25–60 recomendado)")]
+    [Header("Física (spring-damper + asistencia)")]
     public float rigidezBase = 40f;
-
-    [Tooltip("Curva que escala la rigidez con la distancia (input: 0=boquilla, 1=rango).")]
     public AnimationCurve rigidezPorDistancia = AnimationCurve.EaseInOut(0, 1, 1, 0.35f);
-
-    [Tooltip("Factor sobre amortiguación crítica (0.6–1.4).")]
     public float factorAmortiguacion = 1.0f;
-
-    [Tooltip("Límite de aceleración para estabilidad.")]
     public float limiteAceleracion = 50f;
-
-    [Header("Asistencia cercana")]
-    [Tooltip("Distancia para comenzar asistencia (snap).")]
     public float distanciaSnap = 0.5f;
-    [Tooltip("Mezcla con movimiento cinemático (0..1).")]
     public float mezclaSnap = 0.4f;
-    [Tooltip("Velocidad de snap (m/s).")]
     public float snapVelocidad = 12f;
 
-    // ---------------------------
-    // Captura + capacidad
-    // ---------------------------
     [Header("Captura + Capacidad")]
     public int capacidadMax = 10;
-    public bool destruirMicroBasura = true;   // fallback si el objeto no tiene material
+    public bool destruirMicroBasura = true;
+    [Tooltip("Ignora capacidad y destruye TODOS los objetos al capturar.")]
+    public bool destruirTodosAlCapturar = true;   // ← activa esto si quieres que TODO desaparezca
     public float cooldownCaptura = 0.1f;
     public float masaMaxAspirable = 8f;
     public bool requiereLineaDeVision = true;
 
-    // ---------------------------
-    // Capas
-    // ---------------------------
     [Header("Capas")]
-    public LayerMask capasAspirables;  // "Basura"
-    public LayerMask capasBloqueo;     // "Entorno"
+    public LayerMask capasAspirables;
+    public LayerMask capasBloqueo;
 
-    // ---------------------------
-    // Eventos
-    // ---------------------------
     [Header("Eventos")]
     public IntEvent OnCapturadoMicro;
     public GOEvent  OnCapturadoNormal;
     public UnityEvent OnContenedorLleno;
 
-    // ---------------------------
-    // Estado público
-    // ---------------------------
     [HideInInspector] public bool aspirando = false;
-    public int ContenidoActual => _contenedor.Count;
-    public int CapacidadMax   => capacidadMax;
-    public int PuntajeMicro   => _microBasuraContador;
 
-    // ---------------------------
-    // Internos
-    // ---------------------------
     private readonly Collider[] _buffer = new Collider[64];
     private readonly List<GameObject> _contenedor = new List<GameObject>();
     private readonly Dictionary<int, float> _cooldownPorId = new Dictionary<int, float>();
     private int _microBasuraContador = 0;
+
+    void Start()
+    {
+        if (cam == null && Camera.main != null) cam = Camera.main;
+        if (cam != null)
+        {
+            fovBase = cam.fieldOfView;
+            camLocalBasePos = cam.transform.localPosition;
+        }
+    }
 
     void FixedUpdate()
     {
         if (!aspirando || boquilla == null) return;
 
         int n = Physics.OverlapSphereNonAlloc(
-            boquilla.position,
-            rangoMax,
-            _buffer,
-            capasAspirables,
-            QueryTriggerInteraction.Ignore
-        );
+            boquilla.position, rangoMax, _buffer, capasAspirables, QueryTriggerInteraction.Ignore);
 
         float half = anguloCono * 0.5f;
+        int objetosAtraidos = 0;
 
         for (int i = 0; i < n; i++)
         {
@@ -110,14 +96,11 @@ public class VacuumController : MonoBehaviour
             Rigidbody rb = col.attachedRigidbody;
             if (rb == null || rb.isKinematic) continue;
 
-            // Datos del objetivo (material / overrides)
             VacuumObjetivo vo = col.GetComponent<VacuumObjetivo>();
 
-            // Masa efectiva para succión (cap al filtro de masa aspirable)
             float masaEfectiva = vo ? vo.MasaEfectiva(rb) : rb.mass;
             if (masaEfectiva > masaMaxAspirable) continue;
 
-            // Cooldown por instancia (para no capturar varias veces en el mismo frame)
             int id = rb.GetInstanceID();
             if (_cooldownPorId.TryGetValue(id, out float tReady) && Time.time < tReady) continue;
 
@@ -125,41 +108,30 @@ public class VacuumController : MonoBehaviour
             float dist = haciaObj.magnitude;
             if (dist <= 0.0001f) continue;
 
-            // Cono
             float ang = Vector3.Angle(boquilla.forward, haciaObj);
             if (ang > half) continue;
 
-            // Línea de visión
             if (requiereLineaDeVision &&
                 Physics.Raycast(boquilla.position, haciaObj.normalized, out RaycastHit hit, dist, capasBloqueo, QueryTriggerInteraction.Ignore))
-            {
                 continue;
-            }
 
-            // --------- SPRING-DAMPER ----------
-            Vector3 x = (boquilla.position - rb.worldCenterOfMass);
-            Vector3 v = rb.linearVelocity;
-
-            float t = Mathf.Clamp01(dist / rangoMax); // 0=boquilla .. 1=rango
-            float kBase = rigidezBase * Mathf.Max(0.05f, rigidezPorDistancia.Evaluate(t));
-            float multSuccion = vo ? vo.MultiplicadorSuccionTotal : 1f;
-            float k = kBase * multSuccion;
-
-            // amortiguación crítica aprox en función de masaEfectiva (no rb.mass)
+            // --- succión física ---
+            objetosAtraidos++;
+            float t = Mathf.Clamp01(dist / rangoMax);
+            float k = rigidezBase * Mathf.Max(0.05f, rigidezPorDistancia.Evaluate(t));
+            if (vo) k *= vo.MultiplicadorSuccionTotal;
             float c = factorAmortiguacion * 2f * Mathf.Sqrt(Mathf.Max(0.0001f, k * masaEfectiva));
 
-            Vector3 fuerzaSpring  = k * x;
-            Vector3 fuerzaDamping = -c * v;
-            Vector3 fuerza        = fuerzaSpring + fuerzaDamping;
-
-            // Cap de aceleración
+            Vector3 x = (boquilla.position - rb.worldCenterOfMass);
+            Vector3 v = rb.linearVelocity;
+            Vector3 fuerza = (k * x) - (c * v);
             Vector3 acc = fuerza / Mathf.Max(0.0001f, masaEfectiva);
             if (acc.sqrMagnitude > limiteAceleracion * limiteAceleracion)
                 acc = acc.normalized * limiteAceleracion;
 
             rb.AddForce(acc * rb.mass, ForceMode.Force);
 
-            // --------- SNAP CERCANO ----------
+            // --- snap cercano ---
             if (dist < distanciaSnap && mezclaSnap > 0f)
             {
                 Vector3 target = Vector3.MoveTowards(rb.position, boquilla.position, snapVelocidad * Time.fixedDeltaTime);
@@ -167,48 +139,62 @@ public class VacuumController : MonoBehaviour
                 rb.MovePosition(rb.position + delta);
             }
 
-            // --------- CAPTURA ----------
+            // --- captura ---
             if (dist < radioZonaCaptura)
             {
                 _cooldownPorId[id] = Time.time + cooldownCaptura;
 
                 bool capturable = vo ? vo.EsCapturable : true;
                 bool esMicro    = vo ? vo.EsMicroBasura : destruirMicroBasura;
-
                 if (!capturable) continue;
 
-                // FX de captura (si hay material con datos)
+                // decide qué GO destruir / ocultar
+                GameObject raizDestruir = (vo && vo.raizParaDestruir != null)
+                    ? vo.raizParaDestruir
+                    : rb.transform.root.gameObject; // fallback seguro
+
+                // FX de captura de material (si están)
                 if (vo && vo.material)
                 {
                     if (vo.material.vfxCapturaPrefab)
                         Instantiate(vo.material.vfxCapturaPrefab, col.bounds.center, Quaternion.identity);
-
                     if (vo.material.sfxCaptura)
                         AudioSource.PlayClipAtPoint(vo.material.sfxCaptura, col.bounds.center, vo.material.volumenSfx);
                 }
 
+                // 1) si quieres que TODO desaparezca al capturar:
+                if (destruirTodosAlCapturar)
+                {
+                    raizDestruir.SetActive(false); // oculta inmediatamente
+                    Destroy(raizDestruir, 0.1f);
+                    // si usas contenedor luego para expulsar, desactiva esta opción
+                    continue;
+                }
+
+                // 2) comportamiento por defecto: micro = destruir, normal = almacenar
                 if (esMicro && destruirMicroBasura)
                 {
                     _microBasuraContador++;
                     OnCapturadoMicro?.Invoke(_microBasuraContador);
-                    Destroy(rb.gameObject);
+                    raizDestruir.SetActive(false); // oculta inmediatamente
+                    Destroy(raizDestruir, 0.1f);
                 }
                 else
                 {
-                    // almacenar si hay espacio
                     if (_contenedor.Count < capacidadMax)
                     {
+                        // almacenar (no destruimos)
                         rb.linearVelocity = Vector3.zero;
                         rb.angularVelocity = Vector3.zero;
                         rb.isKinematic = true;
                         rb.useGravity = false;
 
-                        rb.gameObject.SetActive(false); // oculto hasta expulsar
+                        raizDestruir.SetActive(false); // oculto hasta expulsar
                         if (contenedorInterno != null)
-                            rb.transform.SetParent(contenedorInterno, worldPositionStays: true);
+                            raizDestruir.transform.SetParent(contenedorInterno, worldPositionStays: true);
 
-                        _contenedor.Add(rb.gameObject);
-                        OnCapturadoNormal?.Invoke(rb.gameObject);
+                        _contenedor.Add(raizDestruir);
+                        OnCapturadoNormal?.Invoke(raizDestruir);
                     }
                     else
                     {
@@ -218,18 +204,68 @@ public class VacuumController : MonoBehaviour
             }
         }
 
-        // limpiar buffer
+        ActualizarFeedback(objetosAtraidos);
         for (int i = 0; i < n; i++) _buffer[i] = null;
     }
 
-    // API pública
-    public void IniciarSuccion()  { aspirando = true; }
-    public void DetenerSuccion()  { aspirando = false; }
+    private void ActualizarFeedback(int objetos)
+    {
+        float carga = Mathf.Clamp01(objetos / 8f);
 
-    public int GetContenidoActual()     => _contenedor.Count;
-    public int GetCapacidadMax()        => capacidadMax;
-    public int GetPuntajeMicrobasura()  => _microBasuraContador;
+        if (motorAudio)
+        {
+            motorAudio.pitch = Mathf.Lerp(1f, 1.3f, carga);
+            motorAudio.volume = Mathf.Lerp(0.4f, 0.8f, carga);
+        }
+        if (vfxSuccion)
+        {
+            var emission = vfxSuccion.emission;
+            emission.rateOverTime = Mathf.Lerp(10f, 80f, carga);
+        }
+        if (cam)
+        {
+            temblorT += Time.deltaTime * temblorFrecuencia * Mathf.Max(0.01f, carga);
+            float nx = Mathf.PerlinNoise(temblorT, 0.0f) * 2f - 1f;
+            float ny = Mathf.PerlinNoise(0.0f, temblorT) * 2f - 1f;
+            Vector3 objetivo = camLocalBasePos + new Vector3(nx, ny, 0f) * (temblorAmplitud * carga);
+            cam.transform.localPosition = Vector3.Lerp(cam.transform.localPosition, objetivo, Time.deltaTime * temblorSuavizado);
 
-    // (Próximo paso) Expulsar último almacenado:
-    // public GameObject ExpulsarUltimo() { ... }
+            float targetFOV = fovBase + fovKick * carga;
+            cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFOV, Time.deltaTime * fovRecuperacion);
+        }
+    }
+
+    private System.Collections.IEnumerator DestruirConEfecto(GameObject obj)
+    {
+        float dur = 0.12f;
+        if (obj == null) yield break;
+        Vector3 inicio = obj.transform.localScale;
+        for (float t = 0; t < dur; t += Time.deltaTime)
+        {
+            float f = 1f - (t / dur);
+            obj.transform.localScale = inicio * f;
+            yield return null;
+        }
+        Destroy(obj);
+    }
+
+    // API
+    public void IniciarSuccion()
+    {
+        aspirando = true;
+        if (motorAudio && !motorAudio.isPlaying) motorAudio.Play();
+        if (vfxSuccion) vfxSuccion.Play();
+    }
+
+    public void DetenerSuccion()
+    {
+        aspirando = false;
+        if (motorAudio) motorAudio.Stop();
+        if (vfxSuccion) vfxSuccion.Stop();
+        if (cam)
+        {
+            cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, fovBase, 0.2f);
+            cam.transform.localPosition = Vector3.Lerp(cam.transform.localPosition, camLocalBasePos, 0.4f);
+        }
+    }
 }
