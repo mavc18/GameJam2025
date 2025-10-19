@@ -2,7 +2,7 @@ using UnityEngine;
 
 public class VacuumObjetivo : MonoBehaviour
 {
-    [Header("Material (datos por tipo de basura)")]
+    [Header("Material (opcional)")]
     public VacuumMaterialData material;
 
     [Header("Overrides (opcionales)")]
@@ -13,7 +13,7 @@ public class VacuumObjetivo : MonoBehaviour
     public float multiplicadorSuccionExtra = 1f;
 
     [Header("Destrucción visual")]
-    [Tooltip("Si lo asignas, este objeto será el que se reduzca/destruya al capturar. Si no, se usa el root del Rigidbody.")]
+    [Tooltip("Si lo asignas, este objeto será el que se desactive/destruya al capturar. Si no, se usa el root del Rigidbody.")]
     public GameObject raizParaDestruir;
 
     // Helpers
