@@ -358,7 +358,7 @@ public class VacuumController : MonoBehaviour
         ActualizarFeedback(m_aplicoFuerza);
     }
 
-    private void ModEnergia(float delta)
+    public void ModEnergia(float delta)
     {
         float prev = energiaActual;
         energiaActual = Mathf.Clamp(energiaActual + delta, 0f, energiaMax);
@@ -452,16 +452,6 @@ public class VacuumController : MonoBehaviour
 
     void OnGUI()
     {
-        if (!debugOverlayGUI) return;
-        const int pad = 8; int y = pad;
-        GUI.color = Color.white;
-        GUI.Label(new Rect(pad, y, 760, 22), $"Vacuum: {(aspirando ? "ON" : "OFF")} | Energía: {energiaActual:0}/{energiaMax:0} ({(energiaActual/Mathf.Max(1,energiaMax))*100f:0}%)");
-        y += 18;
-        GUI.Label(new Rect(pad, y, 760, 22), $"Rango:{_p.rangoMax:0.0}m  Cono:{_p.anguloCono:0}°  CapturaR:{radioZonaCaptura:0.00}  Offset:{capturaOffset:0.00}  Capacidad:{_contenedor.Count}/{capacidadMax}");
-        y += 18;
-        GUI.Label(new Rect(pad, y, 760, 22), $"Overlap:{m_overlap}  Proc:{m_procesados}/{maxObjetosPorFrame}  Raycasts:{m_raycasts}/{maxRaycastsPorFrame}  LoS-skip:{m_losSkip}  Cono-skip:{m_conoSkip}  Masa-skip:{m_masaSkip}");
-        y += 18;
-        GUI.Label(new Rect(pad, y, 760, 22), $"Fuerza:{m_aplicoFuerza}  Capt:{m_capturados}  Dest:{m_destruidos}  Store:{m_almacenados}");
     }
 
     void OnDrawGizmosSelected()
@@ -492,4 +482,15 @@ public class VacuumController : MonoBehaviour
             Gizmos.DrawLine(boquilla.position, boquilla.position + (q4 * boquilla.forward) * r);
         }
     }
+
+    public void ModificarEnergia(float delta, bool detenerAlMaximo = true)
+    {
+        // asumiendo que tienes una variable energiaActual normalizada (0–1)
+        energiaActual += delta;
+        if (detenerAlMaximo)
+            energiaActual = Mathf.Clamp01(energiaActual);
+
+        OnEnergiaCambiada?.Invoke(energiaActual);
+    }
+
 }

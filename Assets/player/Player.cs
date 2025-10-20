@@ -95,6 +95,11 @@ public class PlayerControllerFPS_DualJoystick : MonoBehaviour
     // NUEVO: offset de inclinación aplicado SOLO por aspirar (no bloquea el pitch)
     private float aspirarTiltOffset = 0f;
 
+    [Header("Partículas de aspirar")]
+    public ParticleSystem particulaSuccion;
+    public ParticleSystem particulaPolvo;
+
+
     void Awake()
     {
 
@@ -279,7 +284,10 @@ public class PlayerControllerFPS_DualJoystick : MonoBehaviour
         if (aspirando) return;
         aspirando = true;
 
-        if (anim != null) anim.SetBool("Aspirando", true);
+        if (particulaSuccion && !particulaSuccion.isPlaying) particulaSuccion.Play();
+        if (particulaPolvo && !particulaPolvo.isPlaying) particulaPolvo.Play();
+
+        if (anim != null) anim.SetBool("OnBotonAspirarPresionado", true);
 
         if (camara != null)
         {
@@ -292,6 +300,9 @@ public class PlayerControllerFPS_DualJoystick : MonoBehaviour
     {
         if (!aspirando) return;
         aspirando = false;
+        
+        if (particulaSuccion && particulaSuccion.isPlaying) particulaSuccion.Stop();
+        if (particulaPolvo && particulaPolvo.isPlaying) particulaPolvo.Stop();
 
         if (anim != null) anim.SetBool("Aspirando", false);
 
