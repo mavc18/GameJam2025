@@ -54,7 +54,7 @@ public class VacuumUI : MonoBehaviour
     void Start()
     {
         // Inicializa UI
-        if (textoEnergia) textoEnergia.text = "0";
+        if (textoEnergia) textoEnergia.text = "100";
         if (textoBasura)  textoBasura.text  = $"0 / {totalBasura}";
 
         if (cuentaRegresiva)

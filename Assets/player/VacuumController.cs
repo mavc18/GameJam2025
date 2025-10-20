@@ -486,6 +486,7 @@ public class VacuumController : MonoBehaviour
     public void ModificarEnergia(float delta, bool detenerAlMaximo = true)
     {
         // asumiendo que tienes una variable energiaActual normalizada (0–1)
+        ModEnergia(delta);
         energiaActual += delta;
         if (detenerAlMaximo)
             energiaActual = Mathf.Clamp01(energiaActual);
