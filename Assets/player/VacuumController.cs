@@ -9,6 +9,8 @@ using UnityEngine.Events;
 
 public class VacuumController : MonoBehaviour
 {
+    [SerializeField] public GameManager manager; // o GameManagerTMP si usas ese
+
     // ========== Referencias ==========
     [Header("Referencias")]
     public Transform boquilla;           // Empty en la punta del tubo
@@ -135,8 +137,19 @@ public class VacuumController : MonoBehaviour
     [Header("Triggers (fiabilidad)")]
     public bool asegurarRigidbodyCinematico = true;
 
+    public bool PuedeAspirar => energiaActual > energiaMinParaAspirar;
+
+
     void Start()
     {
+
+        if (manager == null)
+        {
+            manager = FindObjectOfType<GameManager>(); // cambia a GameManagerTMP si ese es tu script
+            if (manager == null)
+                Debug.LogWarning("[VacuumController] No se encontró GameManager en la escena.");
+        }
+
         if (cam == null && Camera.main != null) cam = Camera.main;
         if (cam != null)
         {
@@ -322,6 +335,8 @@ public class VacuumController : MonoBehaviour
                     raizDestruir.SetActive(false);
                     Destroy(raizDestruir, 0.1f);
                     m_destruidos++;
+                    FindObjectOfType<GameManager>()?.RegistrarBasuraRecolectada();
+
 
                     if (!destruirTodosAlCapturar)
                     {
@@ -493,5 +508,52 @@ public class VacuumController : MonoBehaviour
 
         OnEnergiaCambiada?.Invoke(energiaActual);
     }
+
+    // Botón UI (PointerDown / OnClick)
+    public void OnUIAspirarDown()
+    {
+        if (!PuedeAspirar) return;   // ← BLOQUEA si energía 0
+        IniciarSuccion();
+    }
+
+    // Botón UI (PointerUp)
+    public void OnUIAspirarUp()
+    {
+        DetenerSuccion();
+    }
+
+    // Devuelve cuántas piezas había almacenadas y las elimina (simula meterlas al contenedor final).
+    public int VaciarContenedorInterno()
+    {
+        int cantidad = 0;
+
+        // _contenedor es tu lista interna de objetos guardados (ya la tienes en el controller)
+        for (int i = 0; i < _contenedor.Count; i++)
+        {
+            var go = _contenedor[i];
+            if (!go) continue;
+            // estaban inactivos dentro de la aspiradora; al entregar, simplemente los destruimos
+            Destroy(go);
+            cantidad++;
+        }
+        _contenedor.Clear();
+        return cantidad;
+    }
+
+    
+    private void NotificarBasuraRecolectada()
+    {
+        if (manager != null)
+        {
+            manager.RegistrarBasuraRecolectada();
+            // Debug opcional:
+            // Debug.Log("[VacuumController] Notifiqué recolección al GameManager.");
+        }
+        else
+        {
+            Debug.LogWarning("[VacuumController] Manager es null. Asigna el GameManager en el Inspector o revisa el FindObjectOfType.");
+        }
+    }
+
 
 }
